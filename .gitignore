@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*/__pycache__/
+*.pyc
+debug_output/*.png
+!debug_output/.gitkeep
+checkpoints/*.pt
+checkpoints/*/*.bin
+checkpoints/*/*.safetensors
+*.egg-info/
+dist/
+build/
+.pytest_cache/
