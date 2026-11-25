@@ -11,7 +11,7 @@ import os
 import json
 import torch
 import torch.nn as nn
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+from transformers import AutoTokenizer, AutoModelForCausalLM, AutoConfig, BitsAndBytesConfig
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training, PeftModel
 
 from model.vision_encoder import GUIVisionEncoder
@@ -46,7 +46,8 @@ class AlphaVisionActionModel(nn.Module):
         lora_dropout: float = 0.05,
         freeze_vision_encoder: bool = True,
         torch_dtype: torch.dtype = torch.bfloat16,
-        device_map: Optional[str] = "auto"
+        device_map: Optional[str] = "auto",
+        init_random_weights: bool = False
     ):
         super().__init__()
         self.llm_model_name = llm_model_name
@@ -54,21 +55,30 @@ class AlphaVisionActionModel(nn.Module):
         self.load_in_4bit = load_in_4bit
         self.use_lora = use_lora
         self.torch_dtype = torch_dtype
+        self.init_random_weights = init_random_weights
 
         # 1. Vision Encoder: ConvNeXt CNN
         self.vision_encoder = GUIVisionEncoder(
             model_name=cnn_model_name,
-            pretrained=True,
+            pretrained=not init_random_weights,
             freeze_backbone=freeze_vision_encoder
         )
         cnn_out_dim = self.vision_encoder.get_output_dim()
 
         # 2. Tokenizer & LLM Decoder
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            llm_model_name,
-            trust_remote_code=True,
-            use_fast=True
-        )
+        try:
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                llm_model_name,
+                trust_remote_code=True,
+                use_fast=True,
+                local_files_only=True
+            )
+        except Exception:
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                llm_model_name,
+                trust_remote_code=True,
+                use_fast=True
+            )
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
@@ -79,7 +89,7 @@ class AlphaVisionActionModel(nn.Module):
 
         # 4-bit Quantization Configuration
         bnb_config = None
-        if load_in_4bit and torch.cuda.is_available():
+        if load_in_4bit and torch.cuda.is_available() and not init_random_weights:
             bnb_config = BitsAndBytesConfig(
                 load_in_4bit=True,
                 bnb_4bit_quant_type="nf4",
@@ -87,18 +97,24 @@ class AlphaVisionActionModel(nn.Module):
                 bnb_4bit_use_double_quant=True
             )
 
-        # Load Pretrained Causal LM
-        device_arg = {"device_map": device_map} if (device_map and torch.cuda.is_available()) else {}
-        self.decoder = AutoModelForCausalLM.from_pretrained(
-            llm_model_name,
-            quantization_config=bnb_config if load_in_4bit else None,
-            torch_dtype=torch_dtype if not load_in_4bit else None,
-            trust_remote_code=True,
-            **device_arg
-        )
+        # Load Pretrained or Initialized Causal LM
+        if init_random_weights:
+            config = AutoConfig.from_pretrained(llm_model_name, trust_remote_code=True)
+            self.decoder = AutoModelForCausalLM.from_config(config, trust_remote_code=True)
+            if not (load_in_4bit and torch.cuda.is_available()):
+                self.decoder.to(dtype=torch_dtype)
+        else:
+            device_arg = {"device_map": device_map} if (device_map and torch.cuda.is_available()) else {}
+            self.decoder = AutoModelForCausalLM.from_pretrained(
+                llm_model_name,
+                quantization_config=bnb_config if load_in_4bit else None,
+                torch_dtype=torch_dtype if not load_in_4bit else None,
+                trust_remote_code=True,
+                **device_arg
+            )
 
         # Prepare for k-bit training if quantized
-        if load_in_4bit and torch.cuda.is_available():
+        if load_in_4bit and torch.cuda.is_available() and not init_random_weights:
             self.decoder = prepare_model_for_kbit_training(
                 self.decoder,
                 use_gradient_checkpointing=True
@@ -160,11 +176,11 @@ class AlphaVisionActionModel(nn.Module):
         Multimodal forward pass.
         Visual tokens replace image tokens or are prepended to prompt embeddings.
         """
-        inputs_embeds = self.get_input_embeddings()(input_ids)
+        inputs_embeds = self.get_input_embeddings()(input_ids).to(dtype=self.torch_dtype)
         b, seq_len, embed_dim = inputs_embeds.shape
 
         if pixel_values is not None:
-            visual_tokens = self.encode_vision(pixel_values)  # (B, N_vis, D)
+            visual_tokens = self.encode_vision(pixel_values).to(dtype=self.torch_dtype)  # (B, N_vis, D)
             b_vis, n_vis, _ = visual_tokens.shape
 
             # If input_ids contains the image token, splice visual tokens in

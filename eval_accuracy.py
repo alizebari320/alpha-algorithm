@@ -47,7 +47,8 @@ def evaluate(
     num_eval_samples: int = 50,
     image_size: int = 768,
     benchmark_iters: int = 20,
-    tolerance_pct: float = 0.0
+    tolerance_pct: float = 0.0,
+    init_random_weights: bool = False
 ):
     console = Console() if HAS_RICH else None
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -67,8 +68,9 @@ def evaluate(
     # 1. Initialize Model
     print("Loading Alpha Model for evaluation...")
     model = AlphaVisionActionModel(
-        load_in_4bit=torch.cuda.is_available(),
-        torch_dtype=torch_dtype
+        load_in_4bit=torch.cuda.is_available() and not init_random_weights,
+        torch_dtype=torch_dtype,
+        init_random_weights=init_random_weights
     )
 
     if checkpoint_dir and os.path.exists(checkpoint_dir):
@@ -204,6 +206,7 @@ def main():
     parser.add_argument("--data-path", type=str, default=None)
     parser.add_argument("--samples", type=int, default=30, help="Number of test samples")
     parser.add_argument("--benchmark-iters", type=int, default=15, help="Number of benchmark iterations")
+    parser.add_argument("--init-random-weights", action="store_true", help="Initialize architecture weights directly")
     args = parser.parse_args()
 
     evaluate(
@@ -211,7 +214,8 @@ def main():
         mode=args.mode,
         data_path=args.data_path,
         num_eval_samples=args.samples,
-        benchmark_iters=args.benchmark_iters
+        benchmark_iters=args.benchmark_iters,
+        init_random_weights=args.init_random_weights
     )
 
 

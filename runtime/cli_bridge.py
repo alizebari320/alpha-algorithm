@@ -84,8 +84,8 @@ class AlphaCLIBridge:
         # 3. Crosshair lines extending across screen
         line_len = 50
         # Horizontal
-        draw.line([max(0, click_px - line_len), click_py, max(0, click_px - radius)], fill=color, width=3)
-        draw.line([min(w, click_px + radius), click_py, min(w, click_px + line_len)], fill=color, width=3)
+        draw.line([max(0, click_px - line_len), click_py, max(0, click_px - radius), click_py], fill=color, width=3)
+        draw.line([min(w, click_px + radius), click_py, min(w, click_px + line_len), click_py], fill=color, width=3)
         # Vertical
         draw.line([click_px, max(0, click_py - line_len), click_px, max(0, click_py - radius)], fill=color, width=3)
         draw.line([click_px, min(h, click_py + radius), click_px, min(h, click_py + line_len)], fill=color, width=3)

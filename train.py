@@ -48,7 +48,8 @@ def train(
     load_in_4bit: bool = True,
     lora_r: int = 16,
     lora_alpha: int = 32,
-    seed: int = 42
+    seed: int = 42,
+    init_random_weights: bool = False
 ):
     torch.manual_seed(seed)
     console = Console() if HAS_RICH else None
@@ -78,7 +79,8 @@ def train(
         lora_r=lora_r,
         lora_alpha=lora_alpha,
         freeze_vision_encoder=True,
-        torch_dtype=torch_dtype
+        torch_dtype=torch_dtype,
+        init_random_weights=init_random_weights
     )
 
     # Print model architecture summary table
@@ -227,6 +229,7 @@ def main():
     parser.add_argument("--output-dir", type=str, default="checkpoints/alpha_lightweight", help="Output checkpoint directory")
     parser.add_argument("--image-size", type=int, default=768, help="Screenshot resolution (768 or 1024)")
     parser.add_argument("--no-4bit", action="store_true", help="Disable 4-bit quantization (use full precision)")
+    parser.add_argument("--init-random-weights", action="store_true", help="Initialize architecture weights randomly (skips large pretrained download for fast verification)")
     args = parser.parse_args()
 
     train(
@@ -238,7 +241,8 @@ def main():
         accum_steps=args.accum_steps,
         output_dir=args.output_dir,
         image_size=args.image_size,
-        load_in_4bit=not args.no_4bit
+        load_in_4bit=not args.no_4bit,
+        init_random_weights=args.init_random_weights
     )
 
 
