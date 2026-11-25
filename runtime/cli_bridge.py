@@ -7,6 +7,9 @@ and OpenAI-compatible external CLI LLM fallback.
 from typing import Dict, Any, Optional
 import os
 import sys
+
+# Ensure root directory is in sys.path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import json
 import time
 import argparse
@@ -310,8 +313,17 @@ def main():
 
     dry_run = not args.live
 
+    model = None
+    if args.checkpoint and os.path.exists(args.checkpoint):
+        from model.alpha_model import AlphaVisionActionModel
+        import torch
+        print(f"Loading Alpha Algorithm checkpoint from {args.checkpoint}...")
+        model = AlphaVisionActionModel(load_in_4bit=torch.cuda.is_available(), init_random_weights=True)
+        model.load_lightweight_checkpoint(args.checkpoint)
+        model.eval()
+
     bridge = AlphaCLIBridge(
-        model=None,
+        model=model,
         dry_run=dry_run,
         use_external_api=args.external_api
     )
